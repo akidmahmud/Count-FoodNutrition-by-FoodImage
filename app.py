@@ -20,7 +20,6 @@ def parse_nutrition_response(response_text):
     try:
         # Clean up the response: remove markdown code block indicators and extra whitespace
         cleaned_response = response_text.replace("```json", "").replace("```", "").strip()
-        st.write("Cleaned response:", cleaned_response)
         
         # Parse JSON response
         data = json.loads(cleaned_response)
