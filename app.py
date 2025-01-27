@@ -107,7 +107,7 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
 load_dotenv()
 
 # Initialize OpenAI API key
-openai.api_key = os.getenv('OPENAI_API_KEY')
+api_key = os.getenv('OPENAI_API_KEY')
 if not openai.api_key:
     st.error("OpenAI API key is not set. Please check your .env file.")
     st.stop()
