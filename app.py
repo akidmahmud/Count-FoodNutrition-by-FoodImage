@@ -193,9 +193,6 @@ def process_image_for_analysis(image, max_size=(800, 800), quality=85):
 # # Initialize database
 init_db()
 
-# # Add this line after your init_db() call to check the schema
-check_db_schema()
-
 # # Streamlit UI
 st.title("Macronutrient Counter")
 st.sidebar.header("Your Goal")
