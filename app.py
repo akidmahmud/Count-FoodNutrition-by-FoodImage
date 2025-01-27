@@ -106,14 +106,14 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI client with error handling
+# Initialize OpenAI API key
 api_key = os.getenv('OPENAI_API_KEY')
 if not api_key:
     st.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
     st.stop()
 
-# Simple client initialization without extra parameters
-client = OpenAI(api_key=api_key)
+# Set the API key directly
+openai.api_key = api_key
 
 # Function to analyze image with OpenAI
 def analyze_image_with_image_recognition(image_bytes):
