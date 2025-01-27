@@ -6,7 +6,7 @@ import datetime
 import sqlite3
 import base64
 import os
-from openai import OpenAI
+import openai
 import json
 from dotenv import load_dotenv
 
@@ -107,19 +107,18 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
 load_dotenv()
 
 # Initialize OpenAI API key
-api_key = os.getenv('OPENAI_API_KEY')
-if not api_key:
-    st.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+openai.api_key = os.getenv('OPENAI_API_KEY')
+if not openai.api_key:
+    st.error("OpenAI API key is not set. Please check your .env file.")
     st.stop()
-
+    
 # Set the API key directly
 openai.api_key = api_key
 
 # Function to analyze image with OpenAI
 def analyze_image_with_image_recognition(image_bytes):
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
-
-    response = client.chat.completions.create(
+    response = openai.ChatCompletion.create(
     model="gpt-4o-mini",
     messages=[
         {
