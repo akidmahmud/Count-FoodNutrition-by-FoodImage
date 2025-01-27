@@ -103,29 +103,17 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
     except Exception as e:
         st.error(f"Error saving to database: {str(e)}")
 
-def check_db_schema():
-    """
-    Print the current database schema to debug table structure
-    """
-    conn = sqlite3.connect("nutrition_data.db")
-    cursor = conn.cursor()
-    
-    # Get table info
-    cursor.execute("PRAGMA table_info(records)")
-    columns = cursor.fetchall()
-    
-    st.write("Current database columns:")
-    for col in columns:
-        st.write(f"- {col[1]} ({col[2]})")
-    
-    conn.close()
+# Load environment variables
+load_dotenv()
 
-# Update OpenAI client initialization
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
-if not os.getenv('OPENAI_API_KEY'):
+# Initialize OpenAI client with error handling
+api_key = os.getenv('OPENAI_API_KEY')
+if not api_key:
     st.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
     st.stop()
+
+# Simple client initialization without extra parameters
+client = OpenAI(api_key=api_key)
 
 # Function to analyze image with OpenAI
 def analyze_image_with_image_recognition(image_bytes):
