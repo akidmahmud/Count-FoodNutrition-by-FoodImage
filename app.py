@@ -68,9 +68,7 @@ def init_db():
         conn.commit()
         conn.close()
         st.write("Database initialized successfully!")
-        
-        # Verify the schema
-        check_db_schema()
+       
         
     except Exception as e:
         st.error(f"Error initializing database: {str(e)}")
