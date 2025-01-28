@@ -155,7 +155,8 @@ if not openai.api_key:
     st.stop()
     
 # Set the API key directly
-openai.api_key = api_key
+#openai.api_key = api_key
+client = OpenAI(api_key=api_key)
 
 # Function to analyze image with OpenAI
 def analyze_image_with_image_recognition(image_bytes):
