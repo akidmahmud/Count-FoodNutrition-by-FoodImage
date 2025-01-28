@@ -36,4 +36,4 @@ An AI-powered application that analyzes food images to provide detailed nutritio
 - SQLite
 
 ## Created By
-[Your Name/Username]
+Kumar Ankit
