@@ -192,14 +192,14 @@ def analyze_image_with_image_recognition(image_bytes):
     },
     "improvements": {
         "suggestions": [
-            "suggestion 1",
-            "suggestion 2",
-            ...
+            "🌟 Great choice on including [positive aspect]!",
+            "💪 Keep up the good work with [healthy element]!",
+            "💡 Consider adding [suggestion] to boost nutrition"
         ],
-        "context": "brief explanation of why these improvements are suggested based on the goal"
+        "context": "Start with encouraging feedback about the healthy aspects of the meal, then provide constructive suggestions. Use emojis like 🥗 for healthy choices, 💪 for protein-rich foods, 🌟 for balanced meals, 🍎 for fruits/vegetables, 💚 for nutritious choices."
     }
 }
-Consider the user's goal when suggesting improvements. Provide only the JSON response without any additional text or explanation."""
+Consider the user's goal when suggesting improvements. Be encouraging when healthy choices are present. Provide only the JSON response without any additional text or explanation."""
                 },
                 {
                     "type": "image_url",
@@ -264,17 +264,21 @@ if uploaded_file:
 
     # First Analysis Button
     if not st.session_state.analysis_done and st.button("Analyze Image"):
-        image_bytes = process_image_for_analysis(image)
-        st.session_state.image_bytes = image_bytes
-        st.session_state.base64_image = base64.b64encode(image_bytes).decode("utf-8")
-        
-        # Initial analysis
-        result = analyze_image_with_image_recognition(image_bytes)
-        message_content = result.choices[0].message.content
-        st.session_state.initial_result = parse_nutrition_response(message_content)
-        st.session_state.analysis_done = True
-        st.rerun()
-
+        with st.spinner("🔄 Analyzing your food image... This may take a few seconds."):
+            try:
+                image_bytes = process_image_for_analysis(image)
+                st.session_state.image_bytes = image_bytes
+                st.session_state.base64_image = base64.b64encode(image_bytes).decode("utf-8")
+                
+                # Initial analysis
+                result = analyze_image_with_image_recognition(image_bytes)
+                message_content = result.choices[0].message.content
+                st.session_state.initial_result = parse_nutrition_response(message_content)
+                st.session_state.analysis_done = True
+                st.success("✅ Analysis completed successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error during analysis: {str(e)}")
     # Show results and refinement options after initial analysis
     if st.session_state.analysis_done:
         parsed_result = st.session_state.initial_result
@@ -328,10 +332,11 @@ Provide the nutritional information in the following JSON format only:
     }},
     "improvements": {{
         "suggestions": [
-            "suggestion 1",
-            "suggestion 2"
+            "🌟 Great choice on including [positive aspect]!",
+            "💪 Keep up the good work with [healthy element]!",
+            "💡 Consider adding [suggestion] to boost nutrition"
         ],
-        "context": "brief explanation of why these improvements are suggested based on the goal"
+        "context": "Start with encouraging feedback about the healthy aspects of the meal, then provide constructive suggestions. Use emojis like 🥗 for healthy choices, 💪 for protein-rich foods, 🌟 for balanced meals, 🍎 for fruits/vegetables, 💚 for nutritious choices."
     }}
 }}'''
 
