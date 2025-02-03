@@ -189,7 +189,7 @@ def analyze_image_with_image_recognition(image_bytes):
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
     response = openai.ChatCompletion.create(
-    model="gpt-4o",
+    model="gpt-4o-mini",
     messages=[
         {
             "role": "user",
