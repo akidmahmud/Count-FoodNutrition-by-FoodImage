@@ -9,6 +9,10 @@ import os
 import openai
 import json
 from dotenv import load_dotenv
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -88,19 +92,16 @@ def parse_nutrition_response(response_text):
 
 def init_db():
     """
-    Initialize database with all required columns.
-    If table exists, drop it and recreate with the correct schema.
+    Initialize database if it doesn't exist.
+    Only creates table if it doesn't already exist.
     """
     try:
         conn = sqlite3.connect("nutrition_data.db")
         cursor = conn.cursor()
         
-        # Drop existing table if it exists
-        cursor.execute('''DROP TABLE IF EXISTS records''')
-        
-        # Create new table with all required columns
-        cursor.execute('''CREATE TABLE records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        # Create table only if it doesn't exist
+        cursor.execute('''CREATE TABLE IF NOT EXISTS records (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
             image BLOB,
             timestamp TEXT,
             macronutrients TEXT,
@@ -117,7 +118,7 @@ def init_db():
     except Exception as e:
         st.error(f"Error initializing database: {str(e)}")
 
-def save_record(image, macronutrients, micronutrients, food_items, improvements, goal):
+def save_record(image, macronutrients, micronutrients, food_items, improvements, goal, is_refinement, custom_timestamp=None):
     try:
         conn = sqlite3.connect("nutrition_data.db")
         cursor = conn.cursor()
@@ -128,19 +129,45 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
         food_items_json = json.dumps(food_items)
         improvements_json = json.dumps(improvements)
         
-        cursor.execute("""
-            INSERT INTO records (image, timestamp, macronutrients, micronutrients, food_items, improvements, goal) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            image, 
-            datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            macronutrients_json,
-            micronutrients_json,
-            food_items_json,
-            improvements_json,
-            goal
-        ))
-        conn.commit()
+        # Use custom timestamp if provided, otherwise use current time
+        timestamp = custom_timestamp.strftime('%Y-%m-%d %H:%M:%S') if custom_timestamp else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        if is_refinement:
+            # Update the most recent record instead of creating a new one
+            cursor.execute("""
+                UPDATE records 
+                SET macronutrients = ?,
+                    micronutrients = ?,
+                    food_items = ?,
+                    improvements = ?
+                WHERE id = (
+                    SELECT id 
+                    FROM records 
+                    ORDER BY timestamp DESC 
+                    LIMIT 1
+                )
+            """, (
+                macronutrients_json,
+                micronutrients_json,
+                food_items_json,
+                improvements_json
+            ))
+        else:
+            # Insert a new record
+            cursor.execute("""
+                INSERT INTO records (image, timestamp, macronutrients, micronutrients, food_items, improvements, goal) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                image, 
+                timestamp,
+                macronutrients_json,
+                micronutrients_json,
+                food_items_json,
+                improvements_json,
+                goal
+            ))
+        
+       conn.commit()
         conn.close()
     except Exception as e:
         st.error(f"Error saving to database: {str(e)}")
@@ -224,18 +251,21 @@ def process_image_for_analysis(image, max_size=(800, 800), quality=85):
     Returns:
         bytes of the processed image
     """
-    # Create a copy to avoid modifying original
-    img_copy = image.copy()
-    
-    # Resize using LANCZOS resampling
-    img_copy.thumbnail(max_size, Image.LANCZOS)
-    
-    # Compress and convert to bytes
-    image_bytes = io.BytesIO()
-    img_copy.save(image_bytes, format='JPEG', quality=quality)
-    
-    return image_bytes.getvalue()
-
+    try:
+        # Create a copy to avoid modifying original
+        img_copy = image.copy()
+        
+        # Resize using LANCZOS resampling
+        img_copy.thumbnail(max_size, Image.LANCZOS)
+        
+        # Compress and convert to bytes
+        image_bytes = io.BytesIO()
+        img_copy.save(image_bytes, format='JPEG', quality=quality)
+        
+        return image_bytes.getvalue()
+    except Exception as e:
+        st.error(f"Error processing image: {str(e)}")
+        return None
 
 # # Initialize database
 init_db()
@@ -243,11 +273,43 @@ init_db()
 # # Streamlit UI
 st.title("Macronutrient Counter")
 st.sidebar.header("Your Goal")
-goal = st.sidebar.radio("Select your goal:", ["Maintain weight", "Fat loss", "Weight gain"])
-
+goal = st.sidebar.radio(
+    "Select your goal:",
+    [
+        "Maintain weight",
+        "Fat loss",
+        "Weight gain",
+        "Muscle Gain",
+        "Pregnancy",
+        "Body Building Competition",
+        "Marathon Training",
+        "Endurance Training",
+        "Senior Citizen",
+        "Diabetic Patient",
+        "Kidney Patient"
+    ],
+    help="Select your primary health or fitness goal. This will help tailor the nutritional analysis and recommendations to your specific needs."
+)
 st.header("Upload Food Image")
 uploaded_file = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
 
+# Add time input with default to current time
+col1, col2 = st.columns([2, 1])
+with col1:
+    meal_time = st.time_input(
+        "Select meal time (optional)",
+        value=datetime.now().time(),
+        help="Select the time when this meal was consumed. Defaults to current time if not specified."
+    )
+with col2:
+    meal_date = st.date_input(
+        "Select date (optional)",
+        value=datetime.now().date(),
+        help="Select the date when this meal was consumed. Defaults to today if not specified."
+    )
+
+# Combine date and time for timestamp
+custom_timestamp = datetime.combine(meal_date, meal_time)
 
 # Update the main UI section where results are displayed
 if uploaded_file:
@@ -258,6 +320,10 @@ if uploaded_file:
         st.session_state.image_bytes = None
         st.session_state.base64_image = None
         st.session_state.last_uploaded_file = uploaded_file.name
+        if 'record_saved' in st.session_state:
+            del st.session_state.record_saved
+        # Force a rerun to clear displayed results
+        st.rerun()
     
     image = Image.open(uploaded_file)
     st.image(image, caption="Uploaded Image", use_column_width=True)
@@ -266,15 +332,43 @@ if uploaded_file:
     if not st.session_state.analysis_done and st.button("Analyze Image"):
         with st.spinner("🔄 Analyzing your food image... This may take a few seconds."):
             try:
+                # Ensure image exists and is valid
+                if image is None:
+                    st.error("Please upload an image first")
+                    st.stop()
+                
+                # Process image
                 image_bytes = process_image_for_analysis(image)
+                if image_bytes is None:
+                    st.error("Failed to process image")
+                    st.stop()
+                    
                 st.session_state.image_bytes = image_bytes
                 st.session_state.base64_image = base64.b64encode(image_bytes).decode("utf-8")
                 
                 # Initial analysis
                 result = analyze_image_with_image_recognition(image_bytes)
                 message_content = result.choices[0].message.content
-                st.session_state.initial_result = parse_nutrition_response(message_content)
+                parsed_result = parse_nutrition_response(message_content)
+                
+                # Save to session state
+                st.session_state.initial_result = parsed_result
                 st.session_state.analysis_done = True
+                
+                # Save to database only if not already saved
+                if 'record_saved' not in st.session_state:
+                    save_record(
+                        image_bytes,
+                        parsed_result['macronutrients'],
+                        parsed_result['micronutrients'],
+                        parsed_result['food_items'],
+                        parsed_result['improvements'],
+                        goal,
+                        is_refinement=False,
+                        custom_timestamp=custom_timestamp
+                    )
+                    st.session_state.record_saved = True
+                
                 st.success("✅ Analysis completed successfully!")
                 st.rerun()
             except Exception as e:
@@ -304,10 +398,8 @@ if uploaded_file:
                     current_analysis = json.dumps(parsed_result, indent=2)
                     
                     prompt_text = f'''Analyze the food items in this image, considering the following user description: '{meal_description}'
-
 Your previous analysis was:
 {current_analysis}
-
 Please provide a refined analysis based on the user's description and your previous analysis. 
 Keep the values that seem accurate and adjust only what needs to be changed based on the new information.
 Provide the nutritional information in the following JSON format only:
@@ -365,6 +457,10 @@ Provide the nutritional information in the following JSON format only:
                     st.session_state.initial_result = parsed_result
                     st.success("Analysis refined successfully!")
                     
+                   
+                    
+                    st.success("✅ Analysis refined and saved successfully!")
+                    
                 except Exception as e:
                     st.error(f"Error during refinement: {str(e)}")
                     st.write("Using original analysis results...")
@@ -412,6 +508,144 @@ Provide the nutritional information in the following JSON format only:
                 st.write(f"- {suggestion}")
             st.write("\nContext:")
             st.write(parsed_result['improvements']['context'])
+            
+            # Add Past Records Analysis section
+            st.write("---")
+            st.subheader("📊 Historical Diet Analysis")
+            if st.button("Analyze My Diet History"):
+                try:
+                    conn = sqlite3.connect("nutrition_data.db")
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT macronutrients, micronutrients, food_items, goal, timestamp FROM records ORDER BY timestamp DESC")
+                    past_records = cursor.fetchall()
+                    conn.close()
+
+                    if not past_records:
+                        st.info("No past records found. Add more meals to get a detailed analysis!")
+                    else:
+                        # Prepare data for analysis
+                        analysis_prompt = {
+                            "records": [],
+                            "current_goal": goal,
+                            "total_records": len(past_records)
+                        }
+
+                        for record in past_records:
+                            analysis_prompt["records"].append({
+                                "macronutrients": json.loads(record[0]),
+                                "micronutrients": json.loads(record[1]),
+                                "foods": json.loads(record[2]),
+                                "goal": record[3],
+                                "timestamp": record[4]
+                            })
+
+                        # Call OpenAI for analysis
+                        with st.spinner("🔄 Analyzing your diet history..."):
+                            response = openai.ChatCompletion.create(
+                                model="gpt-4",
+                                messages=[
+                                    {
+                                        "role": "user",
+                                        "content": f"""Analyze the following diet history and provide a comprehensive nutritional analysis. 
+                                        Diet History: {json.dumps(analysis_prompt, indent=2)}
+
+                                        Please provide analysis in the following format:
+                                        {{
+                                            "trend_analysis": {{
+                                                "macronutrient_trends": [
+                                                    "🔍 Detailed observations about macronutrient patterns",
+                                                    "⚠️ Any concerning patterns or excesses"
+                                                ],
+                                                "micronutrient_trends": [
+                                                    "🔍 Key observations about vitamin and mineral intake",
+                                                    "⚠️ Notable deficiencies or concerns"
+                                                ]
+                                            }},
+                                            "goal_alignment": {{
+                                                "progress": [
+                                                    "✅ Areas aligned with {goal}",
+                                                    "❌ Areas needing improvement"
+                                                ],
+                                                "recommendations": [
+                                                    "💡 Specific actionable recommendations",
+                                                    "🎯 Goal-specific suggestions"
+                                                ]
+                                            }},
+                                            "dietary_balance": {{
+                                                "strengths": [
+                                                    "💪 Strong aspects of the diet",
+                                                    "🌟 Particularly healthy choices"
+                                                ],
+                                                "improvements": [
+                                                    "📈 Areas for improvement",
+                                                    "🔄 Suggested dietary adjustments"
+                                                ]
+                                            }},
+                                            "alerts": [
+                                                "⚠️ Alert: [specific concern]",
+                                                "📢 Warning: [potential issue]"
+                                            ]
+                                        }}"""
+                                    }
+                                ],
+                                max_tokens=1000
+                            )
+
+                            try:
+                                analysis = json.loads(response.choices[0].message.content)
+                                
+                                # Create DataFrame from records for plotting
+                                df_records = []
+                                for record in analysis_prompt["records"]:
+                                    timestamp = datetime.strptime(record["timestamp"], '%Y-%m-%d %H:%M:%S')
+                                    macros = record["macronutrients"]
+                                    df_records.append({
+                                        'timestamp': timestamp,
+                                        'calories': macros.get('calories', 0),
+                                        'protein': macros.get('protein', 0),
+                                        'carbohydrates': macros.get('carbohydrates', 0),
+                                        'fat': macros.get('fat', 0)
+                                    })
+                                
+                                df = pd.DataFrame(df_records)
+                                
+                                # Display Trend Analysis
+                                st.write("### 📈 Nutritional Trends")
+                                
+                                # Remove the line charts and keep only the pie chart
+                                # Macronutrient Distribution Pie Chart (Average)
+                                avg_macros = {
+                                    'Protein': df['protein'].mean(),
+                                    'Carbohydrates': df['carbohydrates'].mean(),
+                                    'Fat': df['fat'].mean()
+                                }
+                                
+                                fig_pie = go.Figure(data=[go.Pie(
+                                    labels=list(avg_macros.keys()),
+                                    values=list(avg_macros.values()),
+                                    hole=.3
+                                )])
+                                
+                                fig_pie.update_layout(title='Average Macronutrient Distribution')
+                                st.plotly_chart(fig_pie, use_container_width=True)
+                                
+                                # Display the rest of the analysis
+                                st.write("### 📊 Detailed Analysis")
+                                
+                                st.write("**Macronutrient Patterns:**")
+                                for trend in analysis["trend_analysis"]["macronutrient_trends"]:
+                                    st.write(f"- {trend}")
+                                
+                                # Continue with the rest of your existing analysis display...
+
+                            except json.JSONDecodeError:
+                                st.error("Error parsing the analysis response. Please try again.")
+
+                            except Exception as e:
+                                st.error(f"Error analyzing diet history: {str(e)}")
+
+                except Exception as e:
+                    st.error(f"Error analyzing diet history: {str(e)}")
         
         # Save to database
         save_record(
@@ -420,36 +654,179 @@ Provide the nutritional information in the following JSON format only:
             parsed_result['micronutrients'],
             parsed_result['food_items'],
             parsed_result['improvements'],
-            goal
+            goal,
+            is_refinement=True,
+            custom_timestamp=custom_timestamp
         )
 
-# View saved records
+# Add a section to clear database
+st.header("Database Management")
+if st.button("🗑️ Clear All Records"):
+    try:
+        conn = sqlite3.connect("nutrition_data.db")
+        cursor = conn.cursor()
+        cursor.execute("DROP TABLE IF EXISTS records")
+        conn.commit()
+        
+        # Recreate the table
+        cursor.execute('''CREATE TABLE IF NOT EXISTS records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            image BLOB,
+            timestamp TEXT,
+            macronutrients TEXT,
+            micronutrients TEXT,
+            food_items TEXT,
+            improvements TEXT,
+            goal TEXT
+        )''')
+        conn.commit()
+        conn.close()
+        
+        # Clear session state as well
+        if 'analysis_done' in st.session_state:
+            st.session_state.analysis_done = False
+        if 'initial_result' in st.session_state:
+            st.session_state.initial_result = None
+        if 'image_bytes' in st.session_state:
+            st.session_state.image_bytes = None
+        if 'base64_image' in st.session_state:
+            st.session_state.base64_image = None
+        if 'last_uploaded_file' in st.session_state:
+            st.session_state.last_uploaded_file = None
+            
+        st.success("✅ Database cleared successfully! You can now start adding new records.")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error clearing database: {str(e)}")
+        st.write("Debug info:", e)
+
+def display_records():
+    try:
+        conn = sqlite3.connect("nutrition_data.db")
+        cursor = conn.cursor()
+        
+        # Debug: Check if table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='records'")
+        if not cursor.fetchone():
+            st.warning("Database table does not exist!")
+            return
+            
+        cursor.execute("SELECT COUNT(*) FROM records")
+        count = cursor.fetchone()[0]
+        st.write(f"Total records in database: {count}")
+        
+        cursor.execute("SELECT DISTINCT timestamp, macronutrients, micronutrients, food_items, goal, image FROM records ORDER BY timestamp DESC")
+        records = cursor.fetchall()
+        conn.close()
+
+        if not records:
+            st.info("No records found in the database.")
+        else:
+            for record in records:
+                st.write("---")
+                st.write(f"**📅 Timestamp:** {record[0]}")
+                
+                # Parse and display macronutrients
+                macros = json.loads(record[1])
+                st.write("**💪 Macronutrients:**")
+                for macro, value in macros.items():
+                    if macro == 'calories':
+                        st.write(f"- {macro.title()}: {value} kcal")
+                    elif macro in ['sodium', 'cholesterol']:
+                        st.write(f"- {macro.title()}: {value} mg")
+                    else:
+                        st.write(f"- {macro.title()}: {value}g")
+                
+                # Parse and display micronutrients
+                micros = json.loads(record[2])
+                st.write("\n**🥗 Micronutrients:**")
+                for micro, value in micros.items():
+                    if micro in ['vitamin_a']:
+                        st.write(f"- {micro.replace('_', ' ').title()}: {value} IU")
+                    elif micro in ['fiber']:
+                        st.write(f"- {micro.title()}: {value}g")
+                    else:
+                        st.write(f"- {micro.replace('_', ' ').title()}: {value} mg")
+                
+                # Parse and display food items
+                foods = json.loads(record[3])
+                st.write("\n**🍽️ Foods Identified:**")
+                for food in foods:
+                    st.write(f"- {food}")
+                
+                st.write(f"\n**🎯 Goal:** {record[4]}")
+                
+                # Display the image only once
+                if record[5]:  # Check if image exists
+                    st.image(record[5], caption="Meal Image", use_column_width=True)
+                
+                st.write("---")
+    except Exception as e:
+        st.error(f"Error loading records: {str(e)}")        
+        st.write("Debug info:", e)
+
+# View saved records with debug information
 st.header("View Past Records")
 if st.button("Show Records"):
-    conn = sqlite3.connect("nutrition_data.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT timestamp, macronutrients, food_items, goal, image FROM records")
-    records = cursor.fetchall()
-    conn.close()
-
-    for record in records:
-        st.write(f"**Timestamp:** {record[0]}")
+    try:
+        conn = sqlite3.connect("nutrition_data.db")
+        cursor = conn.cursor()
         
-        # Parse and display macronutrients
-        macros = json.loads(record[1])
-        st.write("**Macronutrients:**")
-        st.write(f"- Carbohydrates: {macros['carbohydrates']}g")
-        st.write(f"- Protein: {macros['protein']}g")
-        st.write(f"- Fat: {macros['fat']}g")
-        
-        # Parse and display food items
-        foods = json.loads(record[2])
-        st.write("**Foods Identified:**")
-        for food in foods:
-            st.write(f"- {food}")
+        # Debug: Check if table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='records'")
+        if not cursor.fetchone():
+            st.warning("Database table does not exist!")
             
-        st.write(f"**Goal:** {record[3]}")
-        # Display the image
-        image_data = record[4]
-        st.image(image_data, caption="Saved Image", use_column_width=True)
-        st.write("---")
+        cursor.execute("SELECT COUNT(*) FROM records")
+        count = cursor.fetchone()[0]
+        st.write(f"Total records in database: {count}")
+        
+        cursor.execute("SELECT DISTINCT timestamp, macronutrients, micronutrients, food_items, goal, image FROM records ORDER BY timestamp DESC")
+        records = cursor.fetchall()
+        conn.close()
+
+        if not records:
+            st.info("No records found in the database.")
+        else:
+            for record in records:
+                st.write("---")
+                st.write(f"**📅 Timestamp:** {record[0]}")
+                
+                # Parse and display macronutrients
+                macros = json.loads(record[1])
+                st.write("**💪 Macronutrients:**")
+                for macro, value in macros.items():
+                    if macro == 'calories':
+                        st.write(f"- {macro.title()}: {value} kcal")
+                    elif macro in ['sodium', 'cholesterol']:
+                        st.write(f"- {macro.title()}: {value} mg")
+                    else:
+                        st.write(f"- {macro.title()}: {value}g")
+                
+                # Parse and display micronutrients
+                micros = json.loads(record[2])
+                st.write("\n**🥗 Micronutrients:**")
+                for micro, value in micros.items():
+                    if micro in ['vitamin_a']:
+                        st.write(f"- {micro.replace('_', ' ').title()}: {value} IU")
+                    elif micro in ['fiber']:
+                        st.write(f"- {micro.title()}: {value}g")
+                    else:
+                        st.write(f"- {micro.replace('_', ' ').title()}: {value} mg")
+                
+                # Parse and display food items
+                foods = json.loads(record[3])
+                st.write("\n**🍽️ Foods Identified:**")
+                for food in foods:
+                    st.write(f"- {food}")
+                
+                st.write(f"\n**🎯 Goal:** {record[4]}")
+                
+                # Display the image
+                if record[5]:  # Check if image exists
+                    st.image(record[5], caption=f"Meal Image - {record[0]}", use_column_width=True)
+                
+                st.write("---")
+    except Exception as e:
+        st.error(f"Error loading records: {str(e)}")
+        st.write("Debug info:", e)
