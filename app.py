@@ -167,7 +167,7 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
                 goal
             ))
         
-       conn.commit()
+        conn.commit()
         conn.close()
     except Exception as e:
         st.error(f"Error saving to database: {str(e)}")
