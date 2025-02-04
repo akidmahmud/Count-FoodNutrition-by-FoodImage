@@ -293,6 +293,14 @@ goal = st.sidebar.radio(
 st.header("Upload Food Image")
 uploaded_file = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
 
+
+
+# Initialize session state for meal time and date if not already set
+if 'meal_time' not in st.session_state:
+    st.session_state.meal_time = datetime.now().time()
+if 'meal_date' not in st.session_state:
+    st.session_state.meal_date = datetime.now().date()
+
 # Add time input with default to current time
 col1, col2 = st.columns([2, 1])
 with col1:
