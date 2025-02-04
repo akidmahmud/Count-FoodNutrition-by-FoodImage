@@ -296,20 +296,29 @@ uploaded_file = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
 # Add time input with default to current time
 col1, col2 = st.columns([2, 1])
 with col1:
-    meal_time = st.time_input(
+    selected_time = st.time_input(
         "Select meal time (optional)",
-        value=datetime.now().time(),
-        help="Select the time when this meal was consumed. Defaults to current time if not specified."
+        value=st.session_state.meal_time,
+        help="Select the time when this meal was consumed. Defaults to current time if not specified.",
+        key='time_input'
     )
+    # Update session state when time changes
+    if selected_time != st.session_state.meal_time:
+        st.session_state.meal_time = selected_time
+
 with col2:
-    meal_date = st.date_input(
+    selected_date = st.date_input(
         "Select date (optional)",
-        value=datetime.now().date(),
-        help="Select the date when this meal was consumed. Defaults to today if not specified."
+        value=st.session_state.meal_date,
+        help="Select the date when this meal was consumed. Defaults to today if not specified.",
+        key='date_input'
     )
+    # Update session state when date changes
+    if selected_date != st.session_state.meal_date:
+        st.session_state.meal_date = selected_date
 
 # Combine date and time for timestamp
-custom_timestamp = datetime.combine(meal_date, meal_time)
+custom_timestamp = datetime.combine(selected_date, selected_time)
 
 # Update the main UI section where results are displayed
 if uploaded_file:
@@ -548,7 +557,6 @@ Provide the nutritional information in the following JSON format only:
                                         "role": "user",
                                         "content": f"""Analyze the following diet history and provide a comprehensive nutritional analysis. 
                                         Diet History: {json.dumps(analysis_prompt, indent=2)}
-
                                         Please provide analysis in the following format:
                                         {{
                                             "trend_analysis": {{
