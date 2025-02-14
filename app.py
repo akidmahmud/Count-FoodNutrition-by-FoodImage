@@ -675,46 +675,46 @@ Provide the nutritional information in the following JSON format only:
             custom_timestamp=custom_timestamp
         )
 
-# Add a section to clear database
-st.header("Database Management")
-if st.button("🗑️ Clear All Records"):
-    try:
-        conn = sqlite3.connect("nutrition_data.db")
-        cursor = conn.cursor()
-        cursor.execute("DROP TABLE IF EXISTS records")
-        conn.commit()
+# # Add a section to clear database
+# st.header("Database Management")
+# if st.button("🗑️ Clear All Records"):
+#     try:
+#         conn = sqlite3.connect("nutrition_data.db")
+#         cursor = conn.cursor()
+#         cursor.execute("DROP TABLE IF EXISTS records")
+#         conn.commit()
         
-        # Recreate the table
-        cursor.execute('''CREATE TABLE IF NOT EXISTS records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            image BLOB,
-            timestamp TEXT,
-            macronutrients TEXT,
-            micronutrients TEXT,
-            food_items TEXT,
-            improvements TEXT,
-            goal TEXT
-        )''')
-        conn.commit()
-        conn.close()
+#         # Recreate the table
+#         cursor.execute('''CREATE TABLE IF NOT EXISTS records (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             image BLOB,
+#             timestamp TEXT,
+#             macronutrients TEXT,
+#             micronutrients TEXT,
+#             food_items TEXT,
+#             improvements TEXT,
+#             goal TEXT
+#         )''')
+#         conn.commit()
+#         conn.close()
         
-        # Clear session state as well
-        if 'analysis_done' in st.session_state:
-            st.session_state.analysis_done = False
-        if 'initial_result' in st.session_state:
-            st.session_state.initial_result = None
-        if 'image_bytes' in st.session_state:
-            st.session_state.image_bytes = None
-        if 'base64_image' in st.session_state:
-            st.session_state.base64_image = None
-        if 'last_uploaded_file' in st.session_state:
-            st.session_state.last_uploaded_file = None
+#         # Clear session state as well
+#         if 'analysis_done' in st.session_state:
+#             st.session_state.analysis_done = False
+#         if 'initial_result' in st.session_state:
+#             st.session_state.initial_result = None
+#         if 'image_bytes' in st.session_state:
+#             st.session_state.image_bytes = None
+#         if 'base64_image' in st.session_state:
+#             st.session_state.base64_image = None
+#         if 'last_uploaded_file' in st.session_state:
+#             st.session_state.last_uploaded_file = None
             
-        st.success("✅ Database cleared successfully! You can now start adding new records.")
-        st.rerun()
-    except Exception as e:
-        st.error(f"Error clearing database: {str(e)}")
-        st.write("Debug info:", e)
+#         st.success("✅ Database cleared successfully! You can now start adding new records.")
+#         st.rerun()
+#     except Exception as e:
+#         st.error(f"Error clearing database: {str(e)}")
+#         st.write("Debug info:", e)
 
 def display_records():
     try:
