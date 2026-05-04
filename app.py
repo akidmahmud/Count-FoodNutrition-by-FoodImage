@@ -175,10 +175,15 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
 # Load environment variables
 load_dotenv()
 
-# Initialize Gemini API key
-api_key = os.getenv('GEMINI_API_KEY') or os.getenv('OPENAI_API_KEY')
+# Initialize Gemini API key (supports both local .env and Streamlit Cloud secrets)
+api_key = (
+    os.getenv('GEMINI_API_KEY') or
+    os.getenv('OPENAI_API_KEY') or
+    st.secrets.get('GEMINI_API_KEY') or
+    st.secrets.get('OPENAI_API_KEY')
+)
 if not api_key:
-    st.error("API key is not set. Please check your .env file.")
+    st.error("API key is not set. Please check your .env file or Streamlit secrets.")
     st.stop()
     
 # Set the API key directly
