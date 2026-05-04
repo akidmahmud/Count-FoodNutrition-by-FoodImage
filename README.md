@@ -31,9 +31,6 @@ An AI-powered application that analyzes food images to provide detailed nutritio
 
 ## Technologies Used
 - Streamlit
-- OpenAI GPT-4 Vision
+- Gemini
 - Python 3.9
 - SQLite
-
-## Created By
-Kumar Ankit

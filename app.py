@@ -6,7 +6,7 @@ import datetime
 import sqlite3
 import base64
 import os
-import openai
+import google.generativeai as genai
 import json
 from dotenv import load_dotenv
 import plotly.graph_objects as go
@@ -175,28 +175,18 @@ def save_record(image, macronutrients, micronutrients, food_items, improvements,
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI API key
-api_key = os.getenv('OPENAI_API_KEY')
-if not openai.api_key:
-    st.error("OpenAI API key is not set. Please check your .env file.")
+# Initialize Gemini API key
+api_key = os.getenv('GEMINI_API_KEY') or os.getenv('OPENAI_API_KEY')
+if not api_key:
+    st.error("API key is not set. Please check your .env file.")
     st.stop()
     
 # Set the API key directly
-openai.api_key = api_key
+genai.configure(api_key=api_key)
 
 # Function to analyze image with OpenAI
 def analyze_image_with_image_recognition(image_bytes):
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
-
-    response = openai.ChatCompletion.create(
-    model="gpt-4o",
-    messages=[
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": """Analyze the food items in this image and provide the nutritional information in the following JSON format only:
+    prompt_text = """Analyze the food items in this image and provide the nutritional information in the following JSON format only:
 {
     "identified_foods": [
         "food item 1",
@@ -227,16 +217,10 @@ def analyze_image_with_image_recognition(image_bytes):
     }
 }
 Consider the user's goal when suggesting improvements. Be encouraging when healthy choices are present. Provide only the JSON response without any additional text or explanation."""
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
-                },
-            ],
-        }
-    ],
-    max_tokens=300,
-    )
+
+    img = Image.open(io.BytesIO(image_bytes))
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    response = model.generate_content([prompt_text, img])
     return response
 
 
@@ -343,7 +327,7 @@ if uploaded_file:
         st.rerun()
     
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+    st.image(image, caption="Uploaded Image", width=700)
 
     # First Analysis Button
     if not st.session_state.analysis_done and st.button("Analyze Image"):
@@ -365,7 +349,7 @@ if uploaded_file:
                 
                 # Initial analysis
                 result = analyze_image_with_image_recognition(image_bytes)
-                message_content = result.choices[0].message.content
+                message_content = result.text
                 parsed_result = parse_nutrition_response(message_content)
                 
                 # Save to session state
@@ -450,27 +434,12 @@ Provide the nutritional information in the following JSON format only:
 }}'''
 
                     # Update the analyze function to include meal description
-                    response = openai.ChatCompletion.create(
-                        model="gpt-4o",
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
-                                    {
-                                        "type": "text",
-                                        "text": prompt_text
-                                    },
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {"url": f"data:image/jpeg;base64,{st.session_state.base64_image}"},
-                                    },
-                                ],
-                            }
-                        ],
-                        max_tokens=500,
-                    )
+                    img_bytes = base64.b64decode(st.session_state.base64_image)
+                    img = Image.open(io.BytesIO(img_bytes))
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    response = model.generate_content([prompt_text, img])
                     # Update parsed result with refined analysis
-                    parsed_result = parse_nutrition_response(response.choices[0].message.content)
+                    parsed_result = parse_nutrition_response(response.text)
                     st.session_state.initial_result = parsed_result
                     st.success("Analysis refined successfully!")
                     
@@ -556,14 +525,9 @@ Provide the nutritional information in the following JSON format only:
                                 "timestamp": record[4]
                             })
 
-                        # Call OpenAI for analysis
+                        # Call Gemini for analysis
                         with st.spinner("🔄 Analyzing your diet history..."):
-                            response = openai.ChatCompletion.create(
-                                model="gpt-4",
-                                messages=[
-                                    {
-                                        "role": "user",
-                                        "content": f"""Analyze the following diet history and provide a comprehensive nutritional analysis. 
+                            prompt_text = f"""Analyze the following diet history and provide a comprehensive nutritional analysis. 
                                         Diet History: {json.dumps(analysis_prompt, indent=2)}
                                         Please provide analysis in the following format:
                                         {{
@@ -602,13 +566,12 @@ Provide the nutritional information in the following JSON format only:
                                                 "📢 Warning: [potential issue]"
                                             ]
                                         }}"""
-                                    }
-                                ],
-                                max_tokens=1000
-                            )
+                            model = genai.GenerativeModel('gemini-2.5-flash')
+                            response = model.generate_content(prompt_text)
 
                             try:
-                                analysis = json.loads(response.choices[0].message.content)
+                                analysis_text = response.text.replace("```json", "").replace("```", "").strip()
+                                analysis = json.loads(analysis_text)
                                 
                                 # Create DataFrame from records for plotting
                                 df_records = []
@@ -774,7 +737,7 @@ def display_records():
                 
                 # Display the image only once
                 if record[5]:  # Check if image exists
-                    st.image(record[5], caption="Meal Image", use_column_width=True)
+                    st.image(record[5], caption="Meal Image", width=700)
                 
                 st.write("---")
     except Exception as e:
@@ -840,7 +803,7 @@ if st.button("Show Records"):
                 
                 # Display the image
                 if record[5]:  # Check if image exists
-                    st.image(record[5], caption=f"Meal Image - {record[0]}", use_column_width=True)
+                    st.image(record[5], caption=f"Meal Image - {record[0]}", width=700)
                 
                 st.write("---")
     except Exception as e:
