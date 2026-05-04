@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(streamlit run *)",
+      "Bash(git remote *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}
